@@ -1,0 +1,6 @@
+{
+  "name": "DermAura - Perfect Corp Skin Diagnostics",
+  "description": "Professional AI skin analysis web application featuring facial zone segmentation, clinical skin health diagnostics, and targeted skincare routines modeled after Perfect Corp API.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

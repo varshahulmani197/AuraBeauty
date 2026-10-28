@@ -30,6 +30,10 @@ export interface ProductAnalysisVerdict {
   rawIngredientList: string;
   analyzedAt: string;
   imageUrl?: string;
+  acneSafetyLevel?: 'safe' | 'caution' | 'high_risk';
+  maxComedogenicRating?: number;
+  fungalAcneSafe?: boolean;
+  evaluatedSkinType?: string;
 }
 
 export interface StoredShelfProduct extends ProductAnalysisVerdict {

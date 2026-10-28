@@ -40,6 +40,7 @@ export const MyShelfSection: React.FC<MyShelfSectionProps> = ({ currentAnalysis 
   const [currentVerdict, setCurrentVerdict] = useState<ProductAnalysisVerdict | null>(null);
   const [savedShelf, setSavedShelf] = useState<StoredShelfProduct[]>([]);
   const [activeFilter, setActiveFilter] = useState<'all' | 'safe' | 'caution' | 'stop'>('all');
+  const [targetSkinProfile, setTargetSkinProfile] = useState<string>('acne_prone');
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -54,11 +55,12 @@ export const MyShelfSection: React.FC<MyShelfSectionProps> = ({ currentAnalysis 
           return;
         }
       }
-      // Initialize with default audited sample item
+      // Initialize with default audited sample item (evaluating against acne-prone skin)
       const initialAudit = auditProductIngredients(
         SAMPLE_POPULAR_PRODUCTS[0].ingredients,
         currentAnalysis,
-        SAMPLE_POPULAR_PRODUCTS[0].name
+        SAMPLE_POPULAR_PRODUCTS[0].name,
+        'acne_prone'
       );
       const initialSaved: StoredShelfProduct = {
         ...initialAudit,
@@ -72,10 +74,16 @@ export const MyShelfSection: React.FC<MyShelfSectionProps> = ({ currentAnalysis 
     }
   }, []);
 
-  const handleAudit = async (customText?: string, customName?: string, customImg?: string | null) => {
+  const handleAudit = async (
+    customText?: string,
+    customName?: string,
+    customImg?: string | null,
+    customProfile?: string
+  ) => {
     const textToAnalyze = (customText !== undefined ? customText : ingredientsTextInput).trim();
     const nameToAnalyze = (customName !== undefined ? customName : productNameInput).trim() || 'Skincare Formula';
     const imgToAnalyze = customImg !== undefined ? customImg : productImage;
+    const profileToAudit = customProfile !== undefined ? customProfile : targetSkinProfile;
 
     setIsAuditing(true);
 
@@ -88,6 +96,7 @@ export const MyShelfSection: React.FC<MyShelfSectionProps> = ({ currentAnalysis 
           rawIngredientsText: textToAnalyze,
           productName: nameToAnalyze,
           userSkinProfile: currentAnalysis,
+          targetSkinProfile: profileToAudit,
         }),
       });
 
@@ -97,12 +106,19 @@ export const MyShelfSection: React.FC<MyShelfSectionProps> = ({ currentAnalysis 
 
       const verdict: ProductAnalysisVerdict = await res.json();
       setCurrentVerdict(verdict);
+      if (verdict.productName && verdict.productName !== 'Skincare Formula') {
+        setProductNameInput(verdict.productName);
+      }
+      if (verdict.rawIngredientList && !ingredientsTextInput) {
+        setIngredientsTextInput(verdict.rawIngredientList);
+      }
     } catch (err: any) {
       console.warn('Client audit fallback:', err);
       const fallbackVerdict = auditProductIngredients(
-        textToAnalyze || 'Aqua, Glycerin, Ceramide NP, Hyaluronic Acid.',
+        textToAnalyze || 'Aqua, Glycerin, Stearic Acid, Isopropyl Palmitate, Ceramide NP.',
         currentAnalysis,
-        nameToAnalyze
+        nameToAnalyze,
+        profileToAudit
       );
       setCurrentVerdict(fallbackVerdict);
     } finally {
@@ -217,17 +233,37 @@ export const MyShelfSection: React.FC<MyShelfSectionProps> = ({ currentAnalysis 
           </p>
         </div>
 
-        {/* User Biometric Link Pill */}
-        <div className="p-3.5 bg-stone-50 rounded-xl border border-stone-200 text-xs shrink-0 self-start md:self-auto space-y-1">
-          <div className="font-semibold text-stone-900 flex items-center gap-1.5 font-mono text-[11px] uppercase text-rose-600">
-            <ShieldCheck className="w-3.5 h-3.5" />
-            Live Biometric Match Active
+        {/* User Biometric Link Pill & Skin Profile Selector */}
+        <div className="p-3.5 bg-stone-50 rounded-xl border border-stone-200 text-xs shrink-0 self-start md:self-auto space-y-2 min-w-[260px]">
+          <div className="flex items-center justify-between gap-2">
+            <div className="font-semibold text-stone-900 flex items-center gap-1.5 font-mono text-[11px] uppercase text-rose-600">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              Biometric Compatibility
+            </div>
+            <span className="text-[10px] font-mono text-stone-500">
+              Scan: {currentAnalysis.skinType}
+            </span>
           </div>
-          <div className="text-stone-700 font-medium text-xs">
-            Profile: <span className="font-bold text-stone-900">{currentAnalysis.skinType} Skin</span> · Age: {currentAnalysis.skinAge}y
-          </div>
-          <div className="text-[11px] text-stone-500 font-mono">
-            Overall Health Score: {currentAnalysis.overallScore}/100
+
+          <div>
+            <label className="text-[10px] font-mono uppercase text-stone-500 font-semibold block mb-1">
+              Audit Target Skin Type:
+            </label>
+            <select
+              value={targetSkinProfile}
+              onChange={(e) => {
+                const newProfile = e.target.value;
+                setTargetSkinProfile(newProfile);
+                handleAudit(undefined, undefined, undefined, newProfile);
+              }}
+              className="w-full bg-white border border-stone-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-stone-900 focus:outline-none focus:ring-2 focus:ring-rose-500/20 cursor-pointer shadow-2xs"
+            >
+              <option value="acne_prone">🔥 Acne-Prone & Breakouts (Strict)</option>
+              <option value="oily">💧 Oily & Congested Pores</option>
+              <option value="combination">⚖️ Combination T-Zone ({currentAnalysis.skinType})</option>
+              <option value="sensitive">🛡️ Sensitive & Weak Barrier</option>
+              <option value="dry">🌸 Dry & Dehydrated</option>
+            </select>
           </div>
         </div>
       </div>
@@ -338,23 +374,49 @@ export const MyShelfSection: React.FC<MyShelfSectionProps> = ({ currentAnalysis 
                   </p>
                 </div>
 
-                {productImage && (
-                  <div className="flex items-center gap-2 p-2 bg-white rounded-lg border border-stone-200 text-xs">
-                    <img
-                      src={productImage}
-                      alt="Uploaded formula"
-                      className="w-10 h-10 rounded object-cover border border-stone-200"
-                    />
-                    <div className="flex-1 truncate">
-                      <span className="font-semibold text-stone-800">Label Image Uploaded</span>
-                      <p className="text-[10px] text-stone-500 font-mono">OCR Transcribed</p>
+                {isAuditing && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-2.5 text-xs text-rose-800">
+                    <RefreshCw className="w-4 h-4 animate-spin text-rose-600 shrink-0" />
+                    <div>
+                      <div className="font-bold">Analyzing Product & INCI Chemicals...</div>
+                      <div className="text-[10px] text-rose-700">Checking against 60+ pore-clogging comedogenic ratings for acne-prone skin</div>
                     </div>
-                    <button
-                      onClick={() => setProductImage(null)}
-                      className="text-stone-400 hover:text-rose-600 p-1"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                  </div>
+                )}
+
+                {productImage && (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 p-2 bg-white rounded-lg border border-stone-200 text-xs">
+                      <img
+                        src={productImage}
+                        alt="Uploaded formula"
+                        className="w-10 h-10 rounded object-cover border border-stone-200"
+                      />
+                      <div className="flex-1 truncate">
+                        <span className="font-semibold text-stone-800">Label Image Uploaded</span>
+                        <p className="text-[10px] text-stone-500 font-mono">
+                          {isAuditing ? 'Scanning with Vision OCR...' : 'Vision Scanned & Audited'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setProductImage(null)}
+                        className="text-stone-400 hover:text-rose-600 p-1"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {currentVerdict && currentVerdict.rawIngredientList && !isAuditing && (
+                      <div className="p-2.5 bg-white rounded-lg border border-stone-200 text-xs space-y-1">
+                        <div className="flex items-center justify-between text-[11px] font-mono text-stone-600 font-semibold">
+                          <span>Detected: {currentVerdict.productName}</span>
+                          <span className="text-emerald-700 font-bold">✓ Complete INCI Parsed</span>
+                        </div>
+                        <p className="text-[10px] text-stone-500 font-mono line-clamp-2">
+                          {currentVerdict.rawIngredientList}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -487,6 +549,75 @@ export const MyShelfSection: React.FC<MyShelfSectionProps> = ({ currentAnalysis 
                           {currentVerdict.segmentSpecificAdvice}
                         </div>
                       </div>
+                    </div>
+
+                    {/* Acne Compatibility & Comedogenic Risk Scorecard */}
+                    <div className="p-3.5 rounded-xl border border-black/10 bg-white/90 space-y-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 font-mono text-xs font-bold text-stone-900">
+                          <Flame
+                            className={`w-4 h-4 ${
+                              (currentVerdict.maxComedogenicRating && currentVerdict.maxComedogenicRating >= 4) ||
+                              currentVerdict.acneSafetyLevel === 'high_risk'
+                                ? 'text-rose-600'
+                                : (currentVerdict.maxComedogenicRating && currentVerdict.maxComedogenicRating >= 2) ||
+                                  currentVerdict.acneSafetyLevel === 'caution'
+                                ? 'text-amber-500'
+                                : 'text-emerald-600'
+                            }`}
+                          />
+                          <span>Acne-Prone & Comedogenicity Audit</span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
+                              (currentVerdict.maxComedogenicRating && currentVerdict.maxComedogenicRating >= 4) ||
+                              currentVerdict.acneSafetyLevel === 'high_risk'
+                                ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                                : (currentVerdict.maxComedogenicRating && currentVerdict.maxComedogenicRating >= 2) ||
+                                  currentVerdict.acneSafetyLevel === 'caution'
+                                ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                            }`}
+                          >
+                            Max Comedogenic Index:{' '}
+                            {currentVerdict.maxComedogenicRating !== undefined
+                              ? `${currentVerdict.maxComedogenicRating}/5`
+                              : '0-1/5'}
+                          </span>
+
+                          {currentVerdict.fungalAcneSafe !== undefined && (
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
+                                currentVerdict.fungalAcneSafe
+                                  ? 'bg-stone-100 text-stone-700'
+                                  : 'bg-amber-100 text-amber-900 border border-amber-300'
+                              }`}
+                            >
+                              {currentVerdict.fungalAcneSafe ? '🛡️ Fungal Acne Safe' : '⚠️ Malassezia Trigger'}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-stone-700 leading-relaxed">
+                        {(currentVerdict.maxComedogenicRating && currentVerdict.maxComedogenicRating >= 4) ||
+                        currentVerdict.acneSafetyLevel === 'high_risk' ? (
+                          <span className="text-rose-950 font-medium">
+                            🚨 <strong>NOT Safe for Acne-Prone Skin:</strong> Contains heavy comedogenic lipids that solidify in sebaceous follicles, provoking closed comedones, blackheads, and inflamed pustules.
+                          </span>
+                        ) : (currentVerdict.maxComedogenicRating && currentVerdict.maxComedogenicRating >= 2) ||
+                          currentVerdict.acneSafetyLevel === 'caution' ? (
+                          <span className="text-amber-950 font-medium">
+                            ⚠️ <strong>Use with Caution on Breakout-Prone Skin:</strong> Contains moderate pore-clogging ingredients. May cause congestion if applied to oily T-zones or worn under occlusive masks.
+                          </span>
+                        ) : (
+                          <span className="text-emerald-950 font-medium">
+                            🟢 <strong>Safe for Acne-Prone Skin:</strong> 100% non-comedogenic active profile (0-1/5). Zero heavy occlusive waxes or breakout-provoking esters detected.
+                          </span>
+                        )}
+                      </p>
                     </div>
                   </div>
                 );
